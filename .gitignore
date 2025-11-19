@@ -2,3 +2,15 @@ __pycache__/
 models_1/
 virtual-env/
 virtual-env-gpu/
+.docs/
+# Model files - upload to Google Drive instead
+models/**/*.pth
+models/**/*.h5
+models/**/obstacles_board*
+# Large log files
+model_logs/*.csv
+# OS files
+.DS_Store
+# Presentation files
+presentation.pptx
+create_presentation.py

@@ -3,86 +3,90 @@
 Code for training a Deep Reinforcement Learning agent to play the game of Snake.
 The agent takes 2 frames of the game as input (image) and predicts the action values for
 the next action to take.
+
+## Running Graded assignment 02
+
+### Prerequisites
+1. Create conda environment from `completeEnv.yaml`:
+   ```bash
+   conda env create -f completeEnv.yaml
+   conda activate uitnn
+   ```
+
+2. Ensure PyTorch is installed (should be included in completeEnv.yaml)
+
+### Training the Agent
+1. Run the training script:
+   ```bash
+   python training.py
+   ```
+   This will train the DeepQLearningAgent using PyTorch. The model configuration is loaded from `model_config/v17.1.json`.
+
+2. Training progress is logged to `model_logs/v17.1.csv`
+
+3. Model checkpoints are saved to `models/v17.1/` every 500 iterations
+
+### Visualizing the Trained Agent
+1. Run the visualization script:
+   ```bash
+   python game_visualization.py
+   ```
+   This generates MP4 files showing the agent playing the game.
+
+### Additional dependencies
+All required dependencies are included in `completeEnv.yaml`. No additional packages are needed.
+
 ***
-Sample games from the best performing [agent](../models/v15.1/model_188000.h5)<br>
+Sample games from the best performing agent<br>
 <img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v15.1_188000_1.gif" alt="model v15.1 agent" ><img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v15.1_188000_5.gif" alt="model v15.1 agent" >
 <img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v15.1_188000_6.gif" alt="model v15.1 agent" ><img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v15.1_188000_11.gif" alt="model v15.1 agent" >
 ***
 
 ## Code Structure
-[game_environment.py](../game_environment.py) contains the necessary code to create and interact with the snake environment (class Snake and SnakeNumpy). The interface is similar to openai gym interface.
+[game_environment.py](game_environment.py) contains the necessary code to create and interact with the snake environment (class Snake and SnakeNumpy). The interface is similar to openai gym interface.
 Key points for SnakeNumpy Class
 * Use the games argument to decide the number of games to play in parallel
 * Set frame_mode to True for continuously running the game, any completed game is immediately reset
 * When performing reset, use the stateful argument to decide whether to do a hard reset or not
 
-[agent.py](../agent.py) contains the agent for playing the game. It implements and trains a convolutional neural network for the action values. Following classes are available
-<table>
-    <head>
-        <tr>
-        <th> Class </th><th> Description</th>
-        </tr>
-    </head>
-    <tr><td>DeepQLearningAgent/td><td>Deep Q Learning Algorithm with CNN Network</td></tr>
-    <tr><td>PolicyGradientAgent</td><td>Policy Gradient Algorithm with CNN Network</td></tr>
-    <tr><td>AdvantageActorCriticAgent</td><td>Advantage Actor Critic (A2C) Algorithm with CNN Network</td></tr>
-    <tr><td>HamiltonianCycleAgent</td><td>Creates a Hamiltonian Cycle on Even Sized Boards for Traversal</td></tr>
-    <tr><td>SupervisedLearningAgent</td><td>Trains Using Examples from another Agent/Human</td></tr>
-    <tr><td>BreadthFirstSearchAgent</td><td>Repeatedly Finds Shortest Path from Snake Head to Food for Traversal</td></tr>
-</table>
+[agent.py](agent.py) contains the agent for playing the game. It implements and trains a convolutional neural network for the action values using PyTorch. The following class is available:
+- **DeepQLearningAgent**: Deep Q Learning Algorithm with CNN Network implemented in PyTorch
 
-[training.py](../training.py) contains the complete code to train an agent.
+[training.py](training.py) contains the complete code to train an agent.
 
-[game_visualization.py](../game_visualization.py) contains the code to convert the game to mp4 format.
+[game_visualization.py](game_visualization.py) contains the code to convert the game to mp4 format.
 
 ```python
 from game_environment import SnakeNumpy
-from agent import QLearningAgent
+from agent import DeepQLearningAgent
 import numpy as np
 
 game_count = 10
 
-env = Snake(board_size=10, frames=2, 
-            max_time_limit=298, games=game_count, # Allows running 10 games in parallel
-            frame_mode=False) # Allows continuous run of successive games
-state = env.reset(stateful=True) # first manual reset required to initialize few variables
-agent = QLearningAgent(board_size=10, frames=2, n_actions=env.get_num_actions(),
-                       buffer_size=10000)
+env = SnakeNumpy(board_size=10, frames=2, 
+            max_time_limit=298, games=game_count,
+            frame_mode=True)
+state = env.reset(stateful=True)
+agent = DeepQLearningAgent(board_size=10, frames=2, n_actions=env.get_num_actions(),
+                       buffer_size=10000, version='v17.1')
 done = np.zeros((game_count,), dtype=np.uint8)
-total_reward = np.zeros((game_count,), dtype=np.uint8)
 epsilon = 0.1
 while(not done.all()):
     legal_moves = env.get_legal_moves()
     if(np.random.random() <= epsilon):
-        action = np.random.choice(np.arange(env.get_num_actions(), game_count)
+        action = np.random.choice(np.arange(env.get_num_actions()), game_count)
     else:
-        action = agent.move(s, legal_moves, values=env.get_values())
+        action = agent.move(state, legal_moves)
     next_state, reward, done, info, next_legal_moves = env.step(action)
-    # info contains time, food (food count), termination_reason (if ends)
-    agent.add_to_buffer([state, action, reward, next_state, done, next_legal_moves])
-    total_reward += reward
+    agent.add_to_buffer(state, action, reward, next_state, done, next_legal_moves)
     state = next_state.copy()
-agent.train_agent(batch_size=32) # perform one step of gradient descent
-agent.update_target_net() # update the target network
-
-
-# another way to use the environment is the frame mode
-# which allows faster accumulation of training data
-env = Snake(board_size=10, frames=2, 
-            max_time_limit=298, games=game_count,
-            frame_mode=True)
-while(True):
-    s = env.reset(stateful=True)
-    total_frames = 0
-    while(total_frames < 100):
-        """ same code as above """
-        total_frames += game_count
-    """ add data to buffer """
+agent.train_agent(batch_size=32)
+agent.update_target_net()
 ```
 
 ## Experiments
-Configuration for different experiments can be found in [model_versions.json](../model_versions.json) file.
-Adam optimizer gives a very noisy curve with very slow increase in rewards. Loss is also not stable. Hence, RMS optimizer is chosen for all further tests and training.
+Configuration for the model can be found in [model_config/v17.1.json](model_config/v17.1.json) file.
+Adam optimizer gives a very noisy curve with very slow increase in rewards. Loss is also not stable. Hence, RMSprop optimizer is chosen for all further tests and training.
 
 ### Effect of Reward Type
 Two reward structures are studied
@@ -111,17 +115,17 @@ Sample game from pretrained model<br>
 <img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v15.2_45500_0.gif" alt="model v15.2 agent">
 
 ## Environment with Obstacles
-40000 10x10 boards are randomly generated with 8 cells as obstacles, while ensuring that the snake always has a path to navigate through the board. The code for the same can be located at : [obstacles_board_generator.py](../obstacles_board_generator.py)<br>
+40000 10x10 boards are randomly generated with 8 cells as obstacles, while ensuring that the snake always has a path to navigate through the board. The code for the same can be located at : [obstacles_board_generator.py](obstacles_board_generator.py)<br>
 Based on the sample plays below, it is evident that the learned policy generalizes well over boards with random obstacles, and even works good on boards with higher number of obstacles (although it has a higher chance of getting stuck in a loop)<br>
 
-Sample games from the best [model](../models/v17.1/model_163500.h5)<br>
+Sample games from the best model<br>
 <img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v17.1_163500_6.gif" alt="model v17.1 agent"><img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v17.1_163500_9.gif" alt="model v17.1 agent"><br>
 
-Sample games from the best [model](../models/v17.1/model_163500.h5) on out of sample boards<br>
+Sample games from the best model on out of sample boards<br>
 <img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v17.1_163500_oos_5.gif" alt="model v17.1 agent"><img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v17.1_163500_oos_9.gif" alt="model v17.1 agent"><br>
 
-Sample game from the best [model](../models/v17.1/model_163500.h5) on empty board<br>
+Sample game from the best model on empty board<br>
 <img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v17.1_163500_no_ob_1.gif" alt="model v17.1 agent">
 
-Sample game from the best [model](../models/v17.1/model_163500.h5) on board with more obstacles<br>
+Sample game from the best model on board with more obstacles<br>
 <img width="400" height="400" src="https://github.com/DragonWarrior15/snake-rl/blob/master/images/game_visual_v17.1_163500_14_ob_3.gif" alt="model v17.1 agent">
